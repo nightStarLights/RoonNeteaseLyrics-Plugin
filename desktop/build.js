@@ -14,16 +14,47 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const { packager } = require('@electron/packager');
 
 const { writeIcon } = require('./make-icon');
 
 const ROOT = path.join(__dirname, '..');
+const EXTENSION_DIR = path.join(ROOT, 'extension');
 // 默认输出到项目根的 dist；R2N_DIST 可以指定到别处
 // （上次的产物正被运行中的 exe 占用、删不掉时很有用）
 const OUT = process.env.R2N_DIST ? path.resolve(process.env.R2N_DIST) : path.join(ROOT, 'dist');
 const NAME = 'RoonNeteaseLyrics';
+
+/**
+ * 打包前确保扩展（extension/）的依赖已装好。
+ * 扩展依赖 node-roon-api、ws 等运行时模块，靠 ELECTRON_RUN_AS_NODE 跑在 exe 里，
+ * 如果这里缺 node_modules，打出来的 exe 里扩展一启动就会「找不到模块」直接退出。
+ */
+function ensureExtensionDeps() {
+  const marker = path.join(EXTENSION_DIR, 'node_modules', 'ws');
+  if (fs.existsSync(marker)) return;
+
+  console.log('检测到扩展依赖尚未安装，正在安装 extension/ 依赖…');
+  try {
+    execSync('npm install --no-fund --no-audit', {
+      cwd: EXTENSION_DIR,
+      stdio: 'inherit',
+      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
+    });
+  } catch (err) {
+    throw new Error(
+      '扩展依赖安装失败（extension/ 目录执行 npm install）。' +
+      '请确认能联网、并能通过 git 访问 github.com，然后重试。\n' +
+      (err && err.message ? err.message : err)
+    );
+  }
+
+  if (!fs.existsSync(marker)) {
+    throw new Error('扩展依赖安装后仍缺少 node_modules/ws，请检查 extension/package.json');
+  }
+}
 
 function dirSize(dir) {
   let total = 0;
@@ -44,6 +75,8 @@ function dirSize(dir) {
 
 (async () => {
   const icon = writeIcon(path.join(__dirname, 'icon.ico'));
+
+  ensureExtensionDeps();
 
   // 自己清掉上一次的产物：交给打包工具删的话，几千个文件会被当成批量删除拦下来
   const target = path.join(OUT, `${NAME}-win32-x64`);

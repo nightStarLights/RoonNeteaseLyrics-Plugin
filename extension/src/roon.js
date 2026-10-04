@@ -7,7 +7,7 @@ const RoonApiStatus = require('node-roon-api-status');
 const RoonApiTransport = require('node-roon-api-transport');
 const RoonApiImage = require('node-roon-api-image');
 
-const EXTENSION_ID = 'com.roon2ncm.lyrics';
+const EXTENSION_ID = 'net.sakarin.roon-ncmapi';
 const DISPLAY_NAME = '网易云歌词 (NetEase Lyrics)';
 const DISPLAY_VERSION = '1.0.0';
 
@@ -35,8 +35,8 @@ class RoonBridge extends EventEmitter {
       display_name: DISPLAY_NAME,
       display_version: DISPLAY_VERSION,
       publisher: 'Roon2NCMAPI',
-      email: 'roon2ncmapi@localhost',
-      website: 'https://github.com/roonlabs/node-roon-api',
+      email: '2389776332@qq.com',
+      website: 'https://github.com/nightStarLights/RoonNeteaseLyrics-Plugin',
       log_level: config.roonLogLevel || 'none',
 
       core_paired: (core) => this._onPaired(core),

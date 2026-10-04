@@ -473,7 +473,7 @@ function renderBadges() {
 
   const source = state.ncm || {};
   if (source.online === false) out.push(['网易云离线', 'err']);
-  else if (source.active === 'direct') out.push(['直连官方接口', 'info']);
+  // else if (source.active === 'direct') out.push(['直连官方接口', 'info']);
   if (state.roon && state.roon.paired === false && state.roon.status !== 'starting') {
     out.push(['Roon 未连接', 'warn']);
   }

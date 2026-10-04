@@ -57,26 +57,6 @@
 
 **不需要部署任何服务**：默认的官方直连不依赖任何依赖包，装完就能用。
 
-### 为什么内置库是可选的
-
-上游仓库 [Binaryify/NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)
-已经 **Public archive（删库归档）**。为了不再向下游分发这个依赖，本项目
-**没有把它写进 `package.json`**；但完整的接入代码保留着，你自己装了就能用：
-
-```bash
-cd extension && npm install NeteaseCloudMusicApi
-```
-
-装好重启即可 —— `auto` 模式会自动优先用它。**不装也完全能用**，
-官方直连不依赖任何依赖包，一样出歌词（只是接口覆盖面窄一些）。
-
-> ⚠️ 已经装好内置库的话，**别在 `extension` 目录直接跑 `npm install`**：
-> 它没写在 `package.json` 里，会被当成多余依赖删掉。真跑了就补回来：
->
-> ```bash
-> cd extension && npm install --no-save NeteaseCloudMusicApi
-> ```
-
 ## 配置文件
 
 ### extension/config.json
@@ -234,7 +214,15 @@ cd extension && node .            :: 前台运行扩展，直接看输出
 cd desktop && npm start           :: 前台运行桌面窗口
 ```
 
-### 打包成 exe（免装 Node）
+### NeteaseCloudMusicApi
+
+上游仓库 [Binaryify/NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)
+已经 **Public archive（删库归档）**。为了不再向下游分发这个依赖，本项目
+**没有把它写进 `package.json`**；但完整的接入代码依旧保留
+
+进入extension目录，将NeteaseCloudMusicApi放入node_modules中并重新打包即可使用
+
+### 打包
 
 **双击 `build-exe.bat`**，或在 `desktop` 目录执行 `npm run build`。
 
@@ -250,16 +238,7 @@ cd desktop && npm start           :: 前台运行桌面窗口
   （例如「端口 8687 已被占用」）。
 
 首次运行会把随包携带的 `config.json` 复制到 `%APPDATA%\RoonNeteaseLyrics\extension\`，
-配置、歌词缓存、按曲目偏移都写在这里。所以：
-
-- **程序目录可以随意移动或整体删除重建，配对信息不会丢**；
-- 反过来，如果要重新配对（或把 exe 发给别人），把上面那个目录删掉即可；
-- 随包的 `extension/config.json` 里带着你自己的配对信息，**分享打包产物前记得清掉它**；
-- 打包会把本地 `extension/node_modules` 一起带进去：**如果你装了可选的内置库，
-  发布前先删掉 `extension/node_modules/NeteaseCloudMusicApi`**，避免连带分发；
-- 应用名（也就是这个目录名）固定为纯 ASCII 的 `RoonNeteaseLyrics`，
-  中文路径在别的机器上容易被某些工具搞出编码问题。旧版本用的 `Roon 网易云歌词` 目录
-  会在首次运行时自动把设置搬过来，搬完可以自己删掉（里面剩余的只是浏览器缓存）。
+配置、歌词缓存、按曲目偏移都写在这里。
 
 ## 调试
 

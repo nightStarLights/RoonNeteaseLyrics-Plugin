@@ -1,0 +1,17 @@
+{
+  "name": "roon-netease-lyrics-desktop",
+  "productName": "RoonNeteaseLyrics",
+  "version": "1.0.0",
+  "description": "桌面悬浮歌词窗口，连接 Roon 歌词扩展的 WebSocket 实时显示歌词",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "node build.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/packager": "^18.4.4",
+    "electron": "^44.5.1"
+  }
+}

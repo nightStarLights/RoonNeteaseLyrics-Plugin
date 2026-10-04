@@ -1,0 +1,27 @@
+{
+  "name": "roon-extension-netease-lyrics",
+  "version": "1.0.0",
+  "description": "Roon 扩展：读取 Roon 当前播放曲目，从 NeteaseCloudMusicApi 获取歌词并通过 WebSocket 广播",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "node ."
+  },
+  "keywords": [
+    "roon",
+    "roon-extension",
+    "lyrics",
+    "netease"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "node-roon-api": "github:roonlabs/node-roon-api",
+    "node-roon-api-image": "github:roonlabs/node-roon-api-image",
+    "node-roon-api-status": "github:roonlabs/node-roon-api-status",
+    "node-roon-api-transport": "github:roonlabs/node-roon-api-transport",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http: https:; connect-src ws: wss: http: https:;"
+  />
+  <title>Roon 网易云歌词</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="cover" id="cover"></div>
+    <div class="scrim"></div>
+
+    <header class="meta" id="meta">
+      <div class="meta-text">
+        <div class="title" id="title">等待 Roon 播放…</div>
+        <div class="artist" id="artist"></div>
+      </div>
+      <div class="badges" id="badges"></div>
+    </header>
+
+    <main class="lyrics-viewport" id="viewport">
+      <div class="lyric-list" id="list"></div>
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon" id="placeholderIcon">♪</div>
+        <div class="placeholder-text" id="placeholderText">正在连接歌词服务…</div>
+        <div class="placeholder-hint" id="placeholderHint"></div>
+      </div>
+    </main>
+
+    <footer class="bottom" id="bottom">
+      <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="source" id="source"></div>
+    </footer>
+
+    <div class="toolbar" id="toolbar">
+      <button type="button" data-action="mode" class="mode-btn" title="歌词显示：原词-翻译 / 原词-注音 / 仅原词（快捷键 T）">
+        <span class="m-tr">译</span><span class="sep">/</span><span class="m-rm">音</span>
+      </button>
+      <button type="button" data-action="pure" class="pure-btn" title="纯享模式：完全透明，只显示歌词（快捷键 P）">纯</button>
+      <button type="button" data-action="search" title="搜索歌词 (Alt+Shift+F)">🔍</button>
+      <button type="button" data-action="refresh" title="重新匹配歌词 (Alt+Shift+R)">⟳</button>
+      <button type="button" data-action="settings" title="设置 (Alt+Shift+S)">⚙</button>
+      <button type="button" data-action="fontDown" title="缩小字号（↓）">−</button>
+      <button type="button" data-action="fontUp" title="放大字号（↑）">＋</button>
+      <button type="button" data-action="lock" title="锁定 / 鼠标穿透 (Alt+Shift+L)">🔓</button>
+      <button type="button" data-action="hide" title="隐藏窗口 (Alt+Shift+H)">✕</button>
+    </div>
+
+    <!-- 锁定后窗口鼠标穿透，工具条缩在最右侧点起来太远，
+         这里在正上方放一个浮动条：缩小 / 解锁 / 放大 -->
+    <div class="lock-bar" id="lockBar">
+      <button type="button" data-action="fontDown" title="缩小字号（↓）">−</button>
+      <button type="button" data-action="lock" class="lock-main" title="解除锁定 (Alt+Shift+L)">🔒</button>
+      <button type="button" data-action="fontUp" title="放大字号（↑）">＋</button>
+    </div>
+
+    <div class="lock-hint" id="lockHint">已锁定 · Alt+Shift+L 解锁</div>
+
+    <section class="panel" id="panelSearch" hidden>
+      <div class="panel-head">
+        <span>手动搜索歌词</span>
+        <button type="button" class="panel-close" data-close="panelSearch">✕</button>
+      </div>
+      <div class="panel-body">
+        <div class="search-row">
+          <input type="text" id="searchInput" placeholder="歌名 / 歌手" spellcheck="false" autocomplete="off" />
+          <button type="button" id="btnSearch" class="primary">搜索</button>
+        </div>
+        <div class="results" id="searchResults"><div class="empty-tip">输入关键字后回车搜索</div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panelSettings" hidden>
+      <div class="panel-head">
+        <span>设置</span>
+        <button type="button" class="panel-close" data-close="panelSettings">✕</button>
+      </div>
+      <div class="panel-body">
+        <label class="field">
+          <span>歌词服务地址</span>
+          <input type="text" id="setWsUrl" spellcheck="false" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span>歌词数据源</span>
+          <select id="setSource">
+            <option value="auto">自动（内置库优先，失败回退官方直连）</option>
+            <option value="lib">内置 NeteaseCloudMusicApi 库</option>
+            <option value="direct">仅网易云官方直连</option>
+            <option value="ncm">本机独立运行的 NeteaseCloudMusicApi 服务</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>NeteaseCloudMusicApi 服务地址（仅上面选「本机服务」时使用）</span>
+          <input type="text" id="setNcmApi" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:14300" />
+        </label>
+
+        <label class="field">
+          <span>监听 Roon 设备</span>
+          <input
+            type="text"
+            id="setZone"
+            list="zoneOptions"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="留空 = 自动识别正在播放的设备"
+          />
+          <datalist id="zoneOptions"></datalist>
+          <div class="hint" id="zoneHint">正在等待 Roon 上报播放区…</div>
+          <div class="hint">点开下拉可以直接选 Roon 当前检测到的设备，也可以自己打字。留空 = 自动跟随正在播放的设备；填了 = 只监听它，其它设备不出歌词。名称不用写全、包含即可匹配、不区分大小写。改完按回车或点别处生效。</div>
+        </label>
+
+        <div class="field">
+          <span>数据源状态</span>
+          <div class="readout" id="sourceInfo">探测中…</div>
+        </div>
+
+        <div class="field">
+          <span>当前曲目时间轴偏移 <b id="offsetVal">0</b> ms</span>
+          <div class="actions">
+            <button type="button" data-offset="-500">− 0.5s</button>
+            <button type="button" data-offset="500">+ 0.5s</button>
+            <button type="button" data-offset="reset">归零</button>
+            <button type="button" data-offset="realign" class="primary">对齐到 Roon</button>
+          </div>
+          <div class="hint">歌词比声音早出现就把偏移调负，晚出现就调正（按曲目记忆）。若整体错位明显，点「对齐到 Roon」重新同步进度。窗口聚焦时可按 <kbd>[</kbd> <kbd>]</kbd> <kbd>\</kbd> <kbd>A</kbd>。</div>
+        </div>
+
+        <div class="field">
+          <span>全局时间轴偏移 <b id="globalOffsetVal">0</b> ms</span>
+          <div class="actions">
+            <button type="button" data-goffset="-1000">− 1s</button>
+            <button type="button" data-goffset="-500">− 0.5s</button>
+            <button type="button" data-goffset="0">归零</button>
+            <button type="button" data-goffset="500">+ 0.5s</button>
+            <button type="button" data-goffset="1000">+ 1s</button>
+          </div>
+          <div class="hint">对<b>所有曲目</b>生效并写入扩展的 config.json。整条音频链路有固定延迟时（例如经过 HQPlayer、网络端点或带大缓冲的输出设备，Roon 上报的位置会领先你实际听到的声音），在这里一次校准即可。正数 = 歌词提前，负数 = 歌词延后。</div>
+        </div>
+
+        <label class="field">
+          <span>字号 <b id="setFontVal">34</b> px</span>
+          <input type="range" id="setFont" min="16" max="72" step="1" />
+        </label>
+
+        <label class="field">
+          <span>窗口不透明度 <b id="setOpacityVal">100</b>%</span>
+          <input type="range" id="setOpacity" min="30" max="100" step="1" />
+        </label>
+
+        <div class="field">
+          <span>歌词颜色</span>
+          <div class="color-row">
+            <label class="color-item" title="改动会同时设置原歌词与翻译/注音两种颜色">
+              <input type="color" id="setColorAll" />
+              <span>全局</span>
+            </label>
+            <label class="color-item" title="原歌词颜色">
+              <input type="color" id="setColorLyric" />
+              <span>原歌词</span>
+            </label>
+            <label class="color-item" title="翻译 / 注音颜色">
+              <input type="color" id="setColorSub" />
+              <span>翻译 / 注音</span>
+            </label>
+            <button type="button" id="btnColorReset">恢复默认</button>
+          </div>
+          <div class="hint">「全局」改一次即可同时设置两种颜色，也可以分开单独调。窗口透明时也能正常生效。</div>
+        </div>
+
+        <label class="field">
+          <span>歌词显示</span>
+          <select id="setMode">
+            <option value="translation">原词 + 翻译</option>
+            <option value="romaji">原词 + 注音（日文罗马音）</option>
+            <option value="original">仅原词</option>
+          </select>
+        </label>
+
+        <div class="toggles">
+          <label><input type="checkbox" id="setCover" /> 封面背景</label>
+          <label><input type="checkbox" id="setTitle" /> 曲目信息</label>
+          <label><input type="checkbox" id="setProgress" /> 进度条</label>
+          <label><input type="checkbox" id="setPure" /> 纯享模式（完全透明）</label>
+          <label><input type="checkbox" id="setOnTop" /> 总在最前</label>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="btnReconnect">重新连接</button>
+          <button type="button" id="btnRefreshLyrics">重新匹配歌词</button>
+          <button type="button" id="btnQuit" class="danger">退出应用</button>
+        </div>
+
+        <div class="field">
+          <span>全局快捷键（点击输入框后直接按组合键；<kbd>Esc</kbd> 取消，<kbd>Backspace</kbd> 清除）</span>
+          <div class="shortcut-editor" id="shortcutList"></div>
+        </div>
+
+        <div class="hint" id="appInfo"></div>
+        <div class="hint">窗口聚焦时也可直接按键：T 歌词显示 · P 纯享模式 · L 锁定 · H 显隐 · S 设置 · F 搜索 · R 重新匹配 · A 对齐 · [ ] \\ 偏移 · ↑↓ 字号 · F12 开发者工具</div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,955 @@
+:root {
+  --accent: #a78bfa;
+  --accent-2: #f472b6;
+  --fg: #f6f7fb;
+  --dim: rgba(246, 247, 251, 0.45);
+  --radius: 18px;
+  --font-size: 34px;
+  --win-opacity: 1;
+  /* 歌词配色，可在设置里改（也可在设置里选「全局」一次改两个） */
+  --lyric-fg: #ffffff;
+  --lyric-sub: #dcdfec;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(11, 13, 21, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  row-gap: 6px;
+  padding: 14px 22px 12px;
+  opacity: var(--win-opacity);
+  user-select: none;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+
+  /* 注意：这里不能用 -webkit-app-region: drag。
+     Windows 下拖拽区域不派发鼠标事件，:hover 也不会触发，
+     会导致「鼠标移上去还原界面」只在少数 no-drag 的小区域生效。
+     窗口拖动改由 JS 实现（见 renderer.js 的 startWindowDrag）。 */
+  -webkit-app-region: no-drag;
+}
+
+/* ------------------------------------------------------- 背景 */
+
+.cover {
+  position: absolute;
+  inset: -25%;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  filter: blur(42px) saturate(155%) brightness(0.5);
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  pointer-events: none;
+}
+
+.cover.visible {
+  opacity: 0.75;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(130% 130% at 18% 0%, rgba(10, 10, 18, 0.35), rgba(8, 8, 14, 0.82));
+  transition: opacity 0.25s ease;
+}
+
+/* ------------------------------------------------------- 顶部信息 */
+
+.meta {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+}
+
+.meta.hidden {
+  display: none;
+}
+
+.meta-text {
+  min-width: 0;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+}
+
+.artist {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.badge {
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.badge.info {
+  background: rgba(167, 139, 250, 0.22);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #ddd6fe;
+}
+
+.badge.warn {
+  background: rgba(251, 191, 36, 0.18);
+  border-color: rgba(251, 191, 36, 0.38);
+  color: #fde68a;
+}
+
+.badge.err {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fecdd3;
+}
+
+/* ------------------------------------------------------- 歌词区 */
+
+.lyrics-viewport {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  min-height: 0;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+}
+
+.lyric-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 左右留白要够：当前行有 scale(1.06) 的放大效果，
+     刚好占满内容宽度的长句会被放大到超出窗口再被裁掉 */
+  padding: 0 20px;
+  will-change: transform;
+  transition: transform 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.line {
+  max-width: 100%;
+  padding: 5px 0;
+  text-align: center;
+  transform-origin: center center;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  opacity: 0.45;
+}
+
+/* 遇到没有断行机会的长串（罗马音、超长英文单词、没空格的句子）必须能强制折行，
+   否则整行会超出窗口、两侧被裁掉。
+   用 anywhere 而不是 break-word：前者还会把断行点计入 min-content 宽度，
+   flex 居中布局下才不会被内容顶宽。 */
+.line .text,
+.line .tr,
+.line .rm {
+  overflow-wrap: anywhere;
+}
+
+/* --line-scale 是逐行算出来的：过长的歌词折行后会超出歌词区，
+   由 JS 按「折行后总高度放得下」给出一个缩放值，整行（含翻译/注音）等比缩小 */
+.line .text {
+  display: inline-block;
+  font-size: calc(var(--font-size) * var(--line-scale, 1));
+  font-weight: 700;
+  line-height: 1.34;
+  letter-spacing: 0.01em;
+  color: var(--lyric-fg);
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.75));
+  transition: color 0.3s ease;
+}
+
+.line .tr {
+  font-size: calc(var(--font-size) * 0.56 * var(--line-scale, 1));
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 3px;
+  color: var(--lyric-sub);
+  opacity: 0.86;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8));
+}
+
+/* 注音（日文罗马音）比翻译再小一号、更淡一些，避免抢主歌词的注意力 */
+.line .rm {
+  font-size: calc(var(--font-size) * 0.46 * var(--line-scale, 1));
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+  color: var(--lyric-sub);
+  opacity: 0.74;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8));
+}
+
+.line.active {
+  transform: scale(1.06);
+}
+
+/* 整行高亮：不做逐字填充（行内的起止时间无法准确推断，只会造成误导）。
+   颜色由设置里的配色决定，这里只负责「当前行更实、更亮」。 */
+.line.active .text {
+  color: var(--lyric-fg);
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 24px rgba(167, 139, 250, 0.5));
+}
+
+.line.active .tr {
+  color: var(--lyric-sub);
+  opacity: 1;
+}
+
+.line.active .rm {
+  color: var(--lyric-sub);
+  opacity: 0.92;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  text-align: center;
+}
+
+.placeholder.visible {
+  display: flex;
+}
+
+.placeholder-icon {
+  font-size: 26px;
+  opacity: 0.5;
+}
+
+.placeholder-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(246, 247, 251, 0.75);
+}
+
+.placeholder-hint {
+  font-size: 11.5px;
+  color: rgba(246, 247, 251, 0.42);
+  line-height: 1.6;
+  max-width: 90%;
+}
+
+/* ------------------------------------------------------- 底部 */
+
+.bottom {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bottom.hidden {
+  display: none;
+}
+
+.progress {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.25s linear;
+}
+
+.source {
+  font-size: 10.5px;
+  color: rgba(246, 247, 251, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+/* ------------------------------------------------------- 工具条 */
+
+.toolbar {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+#app:hover .toolbar {
+  opacity: 1;
+}
+
+.toolbar button.mode-btn,
+.toolbar button.pure-btn {
+  width: auto;
+  padding: 0 7px;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.mode-btn .m-tr,
+.mode-btn .m-rm {
+  color: rgba(255, 255, 255, 0.32);
+  transition: color 0.15s ease;
+}
+
+.mode-btn .sep {
+  color: rgba(255, 255, 255, 0.26);
+  margin: 0 1px;
+}
+
+/* 当前处于哪种显示模式，就把对应的字点亮 */
+.mode-btn.mode-translation .m-tr,
+.mode-btn.mode-romaji .m-rm {
+  color: #ffffff;
+}
+
+.pure-btn.active {
+  background: rgba(167, 139, 250, 0.35);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+/* 锁定后解锁按钮和字号按钮都移到正上方的浮动条里，工具条里不再重复 */
+#app.locked .toolbar button[data-action='lock'],
+#app.locked .toolbar button[data-action='fontUp'],
+#app.locked .toolbar button[data-action='fontDown'] {
+  display: none;
+}
+
+.toolbar button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(22, 24, 36, 0.75);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.toolbar button:hover {
+  background: rgba(52, 56, 84, 0.95);
+  transform: translateY(-1px);
+}
+
+.toolbar button.active {
+  background: rgba(167, 139, 250, 0.35);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+/* ------------------------------------------------------- 锁定浮动条 */
+
+/* 锁定时窗口是鼠标穿透的，工具条又缩在最右侧，点起来太远。
+   这里在正上方（水平居中）放一个浮动条：− 解锁 ＋ */
+.lock-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+#app.locked .lock-bar {
+  display: flex;
+}
+
+#app.locked:hover .lock-bar {
+  opacity: 1;
+}
+
+.lock-bar button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(22, 24, 36, 0.88);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.lock-bar button:hover {
+  background: rgba(56, 60, 92, 0.98);
+  transform: translateY(-1px);
+}
+
+.lock-bar button.lock-main {
+  background: rgba(167, 139, 250, 0.45);
+  border-color: rgba(167, 139, 250, 0.7);
+  font-size: 17px;
+}
+
+/* ------------------------------------------------------- 锁定提示 */
+
+.lock-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(167, 139, 250, 0.24);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #ede9fe;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+#app.locked:hover .lock-hint {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------- 纯享模式 */
+
+/* 完全透明：没有底板、没有封面、没有曲目信息与进度条，只剩歌词。
+   鼠标移上去时还原（锁定时不还原，只露出锁按钮）。 */
+#app.pure {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+#app.pure .cover,
+#app.pure .scrim,
+#app.pure .meta,
+#app.pure .bottom,
+#app.pure .lock-hint {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#app.pure:not(.locked):hover {
+  background: rgba(11, 13, 21, 0.58);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+#app.pure:not(.locked):hover .cover.visible {
+  opacity: 0.75;
+}
+
+#app.pure:not(.locked):hover .scrim,
+#app.pure:not(.locked):hover .meta,
+#app.pure:not(.locked):hover .bottom {
+  opacity: 1;
+}
+
+/* 纯享 + 锁定：悬停只露出正上方的 − 锁 ＋ 浮动条，其余保持透明 */
+#app.pure.locked .toolbar {
+  display: none;
+}
+
+/* ------------------------------------------------------- 面板 */
+
+.panel {
+  position: absolute;
+  inset: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(18, 20, 32, 0.99), rgba(12, 14, 22, 0.99));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+}
+
+.panel-close {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.panel-close:hover {
+  background: rgba(244, 63, 94, 0.3);
+  color: #fff;
+}
+
+.panel-body {
+  padding: 10px 12px;
+  overflow-y: auto;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field > span {
+  font-size: 11.5px;
+  color: rgba(246, 247, 251, 0.62);
+}
+
+.field b {
+  color: var(--accent);
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+input[type="text"]:focus {
+  border-color: rgba(167, 139, 250, 0.7);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  height: 14px;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11.5px;
+  color: rgba(246, 247, 251, 0.78);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.color-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: rgba(246, 247, 251, 0.72);
+  cursor: pointer;
+}
+
+.color-item input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-row button {
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.color-row button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.toggles label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.toggles input {
+  accent-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+button {
+  font-family: inherit;
+}
+
+.actions button,
+.search-row button {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fg);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.actions button:hover,
+.search-row button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.actions button.primary,
+.search-row button.primary {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.85), rgba(244, 114, 182, 0.85));
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.actions button.danger {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fecdd3;
+}
+
+.readout {
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(246, 247, 251, 0.8);
+}
+
+.readout .ok {
+  color: #5ce69a;
+}
+
+.readout .bad {
+  color: #ff8a99;
+}
+
+.readout .sub {
+  color: rgba(246, 247, 251, 0.42);
+  font-size: 10.5px;
+}
+
+.hint {
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: rgba(246, 247, 251, 0.38);
+}
+
+select {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+select:focus {
+  border-color: rgba(167, 139, 250, 0.7);
+}
+
+select option {
+  background: #14161f;
+  color: var(--fg);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.shortcut-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.shortcut-editor .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcut-editor .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.shortcut-editor .dot.ok {
+  background: #5ce69a;
+}
+
+.shortcut-editor .dot.bad {
+  background: #ff8a99;
+}
+
+.shortcut-editor .label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: rgba(246, 247, 251, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-editor input.sc-input {
+  width: 128px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font-size: 11px;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+}
+
+.shortcut-editor input.sc-input::placeholder {
+  color: rgba(246, 247, 251, 0.32);
+}
+
+.shortcut-editor input.sc-input:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.shortcut-editor input.sc-input:focus {
+  border-color: rgba(167, 139, 250, 0.75);
+  background: rgba(167, 139, 250, 0.16);
+  color: #ddd6fe;
+}
+
+.shortcut-editor input.sc-input.ok {
+  border-color: rgba(92, 230, 154, 0.35);
+}
+
+.shortcut-editor input.sc-input.bad {
+  border-color: rgba(255, 138, 153, 0.45);
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.search-row input {
+  flex: 1;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.result-item:hover {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.result-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-sub {
+  font-size: 10.5px;
+  color: rgba(246, 247, 251, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.result-score {
+  font-size: 10.5px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.empty-tip {
+  font-size: 11.5px;
+  color: rgba(246, 247, 251, 0.4);
+  padding: 10px 2px;
+}
+
+/* ------------------------------------------------------- Toast */
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  background: rgba(20, 22, 34, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--fg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.toast.visible {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------- 滚动条 */
+
+.panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+}

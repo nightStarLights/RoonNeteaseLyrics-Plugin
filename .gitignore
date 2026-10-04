@@ -1,0 +1,19 @@
+node_modules/
+logs/
+dist/
+
+# 运行期产生的歌词缓存与按曲目偏移
+lyrics-cache.json
+offsets.json
+
+# 配置文件里含 Roon Core 的配对令牌（roonstate），绝不能提交到公开仓库。
+# 缺失时扩展会按默认值自动创建，所以忽略它不影响别人使用。
+extension/config.json
+extension/config.json.*
+
+# 打包时生成的 exe 图标
+desktop/icon.ico
+
+*.log
+.tmp-*
+.playwright-cli/
